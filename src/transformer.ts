@@ -34,7 +34,7 @@ const Extractor = new HtmlExtractor();
  * @param {Array} accumulator
  * @param {Object} fragment
  */
-const reduceFragmentsUnderHeadings = (accumulator, fragment) => {
+export const reduceFragmentsUnderHeadings = (accumulator, fragment) => {
 	const existingFragment = accumulator.find(existing => existing.anchor === fragment.anchor);
 
 	if (existingFragment) {
@@ -59,12 +59,11 @@ const reduceFragmentsUnderHeadings = (accumulator, fragment) => {
  * Fragment Transformer
  * breaks down large HTML strings into sensible fragments based on headings
  */
-export const fragmentTransformer = (recordAccumulator, node) => {
-	let htmlFragments = Extractor
-		// These are the top-level HTML elements that we keep - this results in a lot of fragments
-		.run(node.html, { cssSelector: `p,pre,td,li` })
-		// Use the utility function to merge fragments so that there is one-per-heading
-		.reduce(reduceFragmentsUnderHeadings, []);
+export const fragmentTransformer = async (recordAccumulator, node) => {
+	let htmlFragments = (await Extractor.run(node.html, { cssSelector: `p,pre,td,li` })).reduce(
+		reduceFragmentsUnderHeadings,
+		[]
+	);
 
 	// convert our fragments for this node into valid objects, and merge int the
 	const records = htmlFragments.reduce((fragmentAccumulator, fragment, index) => {

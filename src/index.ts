@@ -54,7 +54,10 @@ router.post('/published', async (request, env: Environment) => {
 	);
 
 	// Create fragments of the post
-	const fragments = algoliaObject.reduce(transforms.fragmentTransformer, []);
+	const fragments = await algoliaObject.reduce(async (prevPromise, cur) => {
+		const prev = await prevPromise;
+		return transforms.fragmentTransformer(prev, cur);
+	}, Promise.resolve([]));
 
 	try {
 		// Instanciate the Algolia indexer, which connects to Algolia and

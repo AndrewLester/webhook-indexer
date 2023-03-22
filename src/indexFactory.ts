@@ -24,6 +24,59 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
+globalThis.XMLHttpRequest = class {
+	method: string;
+	url: string;
+	headers = {};
+	onreadystatechange: () => void | undefined;
+	onerror: () => void | undefined;
+	onload: () => void | undefined;
+	promise: Promise<Response> | undefined;
+	status = 0;
+	responseText: string | undefined;
+	readyState = 0;
+	OPENED = 1;
+	controller = new AbortController();
+	signal;
+
+	open(method: string, url: string) {
+		this.method = method;
+		this.url = url;
+		this.readyState = this.OPENED;
+		this.onreadystatechange?.();
+		this.signal = this.controller.signal;
+	}
+
+	setRequestHeader(key: string, value: string) {
+		this.headers[key] = value;
+	}
+
+	abort() {
+		this.controller.abort();
+	}
+
+	send(data: string | undefined) {
+		this.promise = fetch(this.url, {
+			method: this.method,
+			headers: this.headers,
+			body: data,
+			signal: this.signal,
+		});
+
+		this.promise
+			.then(async res => {
+				this.status = res.status;
+				this.readyState = 2;
+				this.onreadystatechange?.();
+				this.responseText = await res.text();
+				this.readyState = 4;
+				this.onreadystatechange?.();
+				this.onload?.();
+			})
+			.catch(e => this.onerror?.(e));
+	}
+};
+
 import algoliaSearch from 'algoliaSearch';
 
 // Any defined settings will override those in the algolia UI
