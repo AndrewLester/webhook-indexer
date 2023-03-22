@@ -1,0 +1,15 @@
+name = "webhook-indexer" # todo
+main = "./src/index.ts"
+compatibility_date = "2022-05-03"
+account_id = "438141d8fd9efad8835e5e58c7ef96ff"
+
+kv_namespaces = [
+    { binding = "INDEXER_CONFIG", id = "5561072a61ab4ac094be98e448d25b22", preview_id = "3011c3376b7e48efba9b26f9f1566bcb" }
+]
+
+# [vars]
+# Required secrets:
+# - ALGOLIA_APP_ID
+# - ALGOLIA_API_KEY
+# - ALGOLIA_INDEX
+# - WEBHOOK_SECRET
