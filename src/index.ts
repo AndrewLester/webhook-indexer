@@ -52,7 +52,7 @@ router
 			return error(400, 'No valid request body detected');
 		}
 
-		const fragments = createAlgoliaFragments(current, await getIgnoreSlugs(env));
+		const fragments = await createAlgoliaFragments(current, await getIgnoreSlugs(env));
 
 		try {
 			await saveAlgoliaFragments(fragments, getAlgoliaSettings(env));
@@ -100,7 +100,7 @@ router
 		}
 
 		const current = post.current;
-		const fragments = createAlgoliaFragments(current, await getIgnoreSlugs(env));
+		const fragments = await createAlgoliaFragments(current, await getIgnoreSlugs(env));
 
 		try {
 			await saveAlgoliaFragments(fragments, getAlgoliaSettings(env));
