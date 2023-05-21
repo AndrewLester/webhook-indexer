@@ -109,6 +109,8 @@ export const transformToAlgoliaObject = (posts, ignoreSlugs) => {
 			html: post.html,
 			image: post.feature_image,
 			title: post.title,
+			createdAt: post.created_at,
+			updatedAt: post.updated_at,
 			tags: [],
 			authors: [],
 		};

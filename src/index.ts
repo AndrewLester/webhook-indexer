@@ -19,124 +19,98 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  */
 
-import { Router, IRequest } from 'itty-router';
-import IndexFactory from './indexFactory';
-import * as transforms from './transformer';
-
-interface Environment {
-	INDEXER_CONFIG: KVNamespace;
-	ALGOLIA_APP_ID: string;
-	ALGOLIA_API_KEY: string;
-	ALGOLIA_INDEX: string;
-	WEBHOOK_SECRET: string;
-}
+import { Router, IRequest, error, text, withContent } from 'itty-router';
+import {
+	createAlgoliaFragments,
+	getAlgoliaSettings,
+	getIgnoreSlugs,
+	removeSlug,
+	saveAlgoliaFragments,
+} from './algolia';
+import { Environment } from './environment';
 
 const router = Router();
 
-router.post('/published', async (request, env: Environment) => {
-	if (!isAuthorized(request, env)) {
-		return new Response('Forbidden', { status: 403 });
-	}
+router
+	.all('*', async (request, env: Environment) => {
+		if (!(await isEnabled(env))) {
+			return error(400);
+		}
 
-	if (!(await isEnabled(env))) {
-		return new Response('Algolia is not activated', {
-			status: 400,
-		});
-	}
+		if (!isAuthorized(request, env)) {
+			return error(403);
+		}
+	})
+	.all('*', withContent, async request => {
+		if (!request.content.post) {
+			return error(400, 'Needs JSON');
+		}
+	})
+	.post('/published', async (request, env: Environment) => {
+		const current = request.content.post?.current;
+		if (!current) {
+			return error(400, 'No valid request body detected');
+		}
 
-	const algoliaSettings = {
-		appId: env.ALGOLIA_APP_ID,
-		apiKey: env.ALGOLIA_API_KEY,
-		index: env.ALGOLIA_INDEX,
-	};
+		const fragments = createAlgoliaFragments(current, await getIgnoreSlugs(env));
 
-	let post: any;
-	try {
-		post = (await request.json()).post;
-	} catch (e) {
-		console.log(e);
-		return new Response('Needs JSON', { status: 400 });
-	}
-	post = (post && Object.keys(post.current).length > 0 && post.current) || {};
+		try {
+			await saveAlgoliaFragments(fragments, getAlgoliaSettings(env));
+			console.log('Fragments successfully saved to Algolia index');
+			return text(`Post "${current.title}" has been added to the index.`, { status: 200 });
+		} catch (e) {
+			console.log(e);
+			return error(500);
+		}
+	})
+	.post('/unpublished', async (request, env) => {
+		const post = request.content.post;
 
-	if (!post || Object.keys(post).length < 1) {
-		return new Response('No valid request body detected', { status: 400 });
-	}
+		// Updated posts are in `post.current`, deleted are in `post.previous`
+		const slug = post?.current?.slug || post?.previous?.slug;
 
-	const node = [];
+		if (!slug) {
+			return error(400, 'No valid request body detected');
+		}
 
-	// Transformer methods need an Array of Objects
-	node.push(post);
+		try {
+			await removeSlug(slug, getAlgoliaSettings(env));
+			console.log(`Fragments for slug "${slug}" successfully removed from Algolia index`);
+			return text(`Post "${slug}" has been removed from the index.`, { status: 200 });
+		} catch (e) {
+			console.log(e);
+			return error(500);
+		}
+	})
+	.post('/published/edited', async (request, env: Environment) => {
+		const post = request.content.post;
 
-	// Transform into Algolia object with the properties we need
-	const algoliaObject = transforms.transformToAlgoliaObject(
-		node,
-		(await env.INDEXER_CONFIG.get('IGNORE_SLUGS'))?.split(',')
-	);
+		// Updated posts are in `post.current`, deleted are in `post.previous`
+		const slug = post?.current?.slug || post?.previous?.slug;
 
-	// Create fragments of the post
-	const fragments = await algoliaObject.reduce(async (prevPromise, cur) => {
-		const prev = await prevPromise;
-		return transforms.fragmentTransformer(prev, cur);
-	}, Promise.resolve([]));
+		if (!slug) {
+			return error(400, 'No valid request body detected');
+		}
 
-	try {
-		// Instanciate the Algolia indexer, which connects to Algolia and
-		// sets up the settings for the index.
-		const index = new IndexFactory(algoliaSettings);
-		await index.setSettingsForIndex();
-		await index.save(fragments);
-		console.log('Fragments successfully saved to Algolia index'); // eslint-disable-line no-console
-		return new Response(`Post "${post.title}" has been added to the index.`, { status: 200 });
-	} catch (error) {
-		console.log(error); // eslint-disable-line no-console
-		return new Response('error', { status: 500 });
-	}
-});
+		try {
+			await removeSlug(slug, getAlgoliaSettings(env));
+		} catch (e) {
+			console.log(e);
+			return error(500);
+		}
 
-router.post('/unpublished', async (request, env) => {
-	if (!isAuthorized(request, env)) {
-		return new Response('Forbidden', { status: 403 });
-	}
+		const current = post.current;
+		const fragments = createAlgoliaFragments(current, await getIgnoreSlugs(env));
 
-	if (!(await isEnabled(env))) {
-		return new Response('Algolia is not activated', {
-			status: 400,
-		});
-	}
-
-	const algoliaSettings = {
-		appId: env.ALGOLIA_APP_ID,
-		apiKey: env.ALGOLIA_API_KEY,
-		index: env.ALGOLIA_INDEX,
-	};
-
-	const { post } = await request.json();
-
-	// Updated posts are in `post.current`, deleted are in `post.previous`
-	const { slug } =
-		(post.current && Object.keys(post.current).length && post.current) ||
-		(post.previous && Object.keys(post.previous).length && post.previous);
-
-	if (!slug) {
-		return new Response('No valid request body detected', { status: 400 });
-	}
-
-	try {
-		// Instanciate the Algolia indexer, which connects to Algolia and
-		// sets up the settings for the index.
-		const index = new IndexFactory(algoliaSettings);
-		await index.initIndex();
-		await index.delete(slug);
-		console.log(`Fragments for slug "${slug}" successfully removed from Algolia index`); // eslint-disable-line no-console
-		return new Response(`Post "${slug}" has been removed from the index.`, { status: 200 });
-	} catch (error) {
-		console.log(error); // eslint-disable-line no-console
-		return new Response('error', { status: 500 });
-	}
-});
-
-router.all('*', () => new Response(null, { status: 404 }));
+		try {
+			await saveAlgoliaFragments(fragments, getAlgoliaSettings(env));
+			return text(`Post "${current.title}" has been updated in the index.`, { status: 200 });
+		} catch (e) {
+			console.log(e);
+			return error(500);
+		}
+	})
+	.all('*', () => new Response(null, { status: 404 }));
 
 async function isEnabled(env: Environment) {
 	return (await env.INDEXER_CONFIG.get('ENABLED')) === '1';

@@ -17,6 +17,6 @@
 		"@tryghost/algolia-indexer": "^0.2.1",
 		"algolia-html-extractor": "github:AndrewLester/html-extractor",
 		"algoliasearch": "^4.15.0",
-		"itty-router": "^3.0.12"
+		"itty-router": "^4.0.0-next.50"
 	}
 }
